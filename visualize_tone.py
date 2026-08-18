@@ -185,7 +185,7 @@ def build_payload(
 
 def visualize_tone(
     in_path: str,
-    out_path: str = "tone_dashboard.html",
+    out_path: str = "tone_dashboard_new_data.html",
     event_intensity: Optional[float] = None,
     max_body: int = 200,
     max_rows: Optional[int] = None,
@@ -489,18 +489,26 @@ render();
 
 
 def main() -> None:
-    # ap = argparse.ArgumentParser(description=__doc__)
-    # ap.add_argument("--in", dest="in_path", required=True, help="toned comments CSV")
-    # ap.add_argument("--out", dest="out_path", default="tone_dashboard.html")
-    # ap.add_argument("--event-intensity", type=float, default=None,
-    #                 help="optional GENOME coded intensity to show on the valence panel")
-    # ap.add_argument("--max-body", type=int, default=200,
-    #                 help="truncate comment bodies baked into the page (chars)")
-    # ap.add_argument("--max-rows", type=int, default=None,
-    #                 help="sample live rows down to this many to keep the file light")
-    # args = ap.parse_args()
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--in", dest="in_path", required=True, help="toned comments CSV")
+    ap.add_argument("--out", dest="out_path", default="tone_dashboard.html")
+    ap.add_argument("--event-intensity", type=float, default=None,
+                    help="optional GENOME coded intensity to show on the valence panel")
+    ap.add_argument("--max-body", type=int, default=200,
+                    help="truncate comment bodies baked into the page (chars)")
+    ap.add_argument("--max-rows", type=int, default=None,
+                    help="sample live rows down to this many to keep the file light")
+    args = ap.parse_args()
 
-    visualize_tone("data/tone_comments/new_model_2022_02_tone_comments.csv")
+    args = ap.parse_args()
+
+    visualize_tone(
+        in_path=args.in_path,
+        out_path=args.out_path,
+        event_intensity=args.event_intensity,
+        max_body=args.max_body,
+        max_rows=args.max_rows,
+    )
 
 
 if __name__ == "__main__":

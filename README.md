@@ -218,42 +218,57 @@ components:
 ### Dependencies
 
 - Python 3.10+
-- `pandas`, `numpy`, `zstandard`, `scikit-learn`
+- `pandas`, `numpy`, `zstandard`
 - `sentence-transformers` (post→event linking)
-- `transformers`, `torch` (tone classification)
+- `transformers`, `torch` (tone classification; CUDA used automatically if available)
 - `tqdm` (progress bars)
 - The dashboard loads Chart.js from a CDN in the browser; no build step.
 
 ```bash
 python -m venv .venv && source .venv/bin/activate    # Windows: .venv\Scripts\activate
-pip install pandas numpy zstandard scikit-learn sentence-transformers transformers torch tqdm
+pip install pandas numpy zstandard sentence-transformers transformers torch tqdm
 ```
 
-### Pipeline (per time period)
+### The two stages
+
+The project has two entry points:
+
+- **`process_data.py`** — runs the data-processing pipeline (filter the Reddit
+  dumps → link posts to GENOME events → fetch the comments on those posts →
+  classify their tone) and writes the tone-classified comment CSVs that the
+  dashboard reads.
+- **`visualize_tone.py`** — reads one of those tone-classified CSVs and generates
+  the interactive HTML dashboard.
+
+### Stage 1 — process the data
+- The reddit data files are available on HuggingFace: https://huggingface.co/datasets/peternasser99/reddit/tree/main
+- Place the monthly Reddit dumps (`RS_YYYY-MM.zst`, `RC_YYYY-MM.zst`) and the
+GENOME events CSV under `data/reddit_dump`, set the input paths and the time period near the
+top of `process_data.py`, then run:
 
 ```bash
-# 1. posts: filter the monthly submissions dump by subreddit + title keyword
-python reddit_dump_parser.py RS_2022-02.zst worldnews_titles.csv 2022-02-01 2022-02-28
-
-# 2-3. link posts to events (edit paths in main.py, then:)
-python main.py                         # -> post_event_links.csv
-
-# 4. pull the comments on the linked posts from the comments dump
-python fetch_comments_for_links.py --links post_event_links.csv \
-    --dump RC_2022-02.zst --out comments_for_links.csv
-
-# 5. classify tone (GPU auto-detected; this is the slow step)
-python classify_tone.py --in comments_for_links.csv --out comments_toned.csv
-
-# 6a. GENOME-centric event enrichment + analysis
-python event_sentiment_analysis.py --events events.csv \
-    --toned comments_toned.csv --out event_sentiment.csv
-
-# 6b. interactive dashboard
-python visualize_tone.py --in comments_toned.csv --out tone_dashboard.html
+python process_data.py
 ```
 
-Open `tone_dashboard.html` in any browser to explore the results interactively.
+This produces the tone-classified comments for that period, e.g.
+`data/tone_comments/new_model_2022_02_tone_comments.csv`. 
+
+### Stage 2 — generate the dashboard
+
+The dashboard is built **from the output of Stage 1**, so that CSV must be present
+in the `data/tone_comments/` folder first. If you ran `process_data.py` on another
+machine (for example a GPU box or a server), **download its output CSV into
+`data/tone_comments/`** before continuing. Then run the visualizer, pointing
+`--in` at that file:
+
+```bash
+python visualize_tone.py \
+    --in data/tone_comments/new_model_2022_02_tone_comments.csv \
+    --out outputs/2022_02_dashboard.html
+```
+
+
+Open the resulting `.html` in any browser to explore the results interactively.
 
 ---
 
@@ -261,15 +276,23 @@ Open `tone_dashboard.html` in any browser to explore the results interactively.
 
 ```
 .
-├── reddit_dump_parser.py        # stream + filter the monthly Reddit dumps (.zst)
-├── link_posts_to_events.py      # MiniLM similarity + date window: posts -> events
-├── main.py                      # entry point that calls the linker
-├── fetch_comments_for_links.py  # pull comments on the linked posts (by link_id)
-├── classify_tone.py             # 7-emotion tone classifier (DistilRoBERTa)
-├── visualize_tone.py            # generate the interactive tone dashboard (HTML)
-├── event_sentiment_analysis.py  # GENOME-centric event enrichment + analysis
-├── data/                        # inputs: GENOME events CSV, monthly .zst dumps
-└── outputs/                     # generated CSVs + tone_dashboard.html
+├── process_data/                        # data-processing pipeline modules
+│   ├── reddit_parser.py                 # stream + filter the monthly Reddit dumps (.zst)
+│   ├── link_posts_to_events.py          # MiniLM similarity + date window: posts -> events
+│   ├── fetch_comments.py                # pull comments on the linked posts (by link_id)
+│   └── classify_tone.py                 # 7-emotion tone classifier (DistilRoBERTa)
+├── process_data.py                      # runs the full pipeline -> tone_comments CSVs
+├── visualize_tone.py                    # generate the interactive dashboard (HTML) from a tone CSV
+├── data/
+│   ├── reddit_dump/                     # inputs: monthly RS_/RC_ dumps (.zst)
+│   ├── events/                          # inputs: GENOME events CSVs (EVENTS_YYYY_MM.csv)
+│   ├── posts/                           # filtered submissions (intermediate)
+│   ├── posts_linked_events/             # posts linked to events (intermediate)
+│   ├── comments/                        # fetched comments (intermediate)
+│   └── tone_comments/                   # tone-classified CSVs — the dashboard's input
+├── 2022_02_dashboard.html               # generated dashboard (Feb 2022)
+├── 2024_01_dashboard.html               # generated dashboard (Jan 2024)
+└── README.md
 ```
 
 ---
@@ -286,6 +309,7 @@ Open `tone_dashboard.html` in any browser to explore the results interactively.
 - **Model access and runtime.** The tone model must be downloaded before it can
   run offline, and classifying tens of thousands of comments on CPU is slow;
   the classifier auto-detects a GPU to mitigate this.
+- **Accuracy of models.** The LLM models, used for linking GENOME events and subreddit posts, and for analysing the tone of the comments, are not always accurate. Also, within the scope of this assignment, it was not possible to benchmark and/or validate different models to test whether they perform well on our specific dataset.
 - **Linkage precision.** Because all posts share one topic, semantic similarity
   alone over-links events to posts; a date window was needed to keep links
   meaningful.
