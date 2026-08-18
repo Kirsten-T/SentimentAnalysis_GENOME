@@ -247,8 +247,8 @@ slightly more negative (−0.27 vs. −0.22), and the anger-to-fear ratio climbs
 
 One more supporting detail worth mentioning: in both periods the upvote skew is
 negative (−0.05 in 2022, −0.05 in 2024), meaning the community consistently
-upvoted the angrier-than-average comments in both years — so the hardening isn't
-just what people wrote, it's what the crowd rewarded.
+upvoted the angrier-than-average comments in both years, so the hardening isn't
+just what people wrote, it's also what the crowd rewarded.
 
 ## 6. How to run
 
