@@ -62,8 +62,7 @@ codes, it makes several questions askable that no existing angle can pose:
 
 The angle also captures *trajectory*, not just a snapshot: the sequence of
 emotions (for example fear → anger, or anger → neutral) carries meaning that an
-averaged sentiment score would destroy. Fear curdling into anger is a
-mobilisation pattern; anger decaying into neutrality is disengagement.
+averaged sentiment score would destroy.
 
 ---
 
@@ -84,13 +83,13 @@ Within that scope, the analysis draws on two data sources.
 
 ### GENOME events
 
-GENOME events are the unit of analysis. The relevant events are retrieved by
-filtering on **Location country = Ukraine** and **Actor country = Ukraine or
-Russia**. This filter is driven by the angle itself, not merely by the case
-study: a public-sentiment layer can only enrich events for which public
-discourse exists in the selected communities, so restricting to Ukraine/Russia
-events in these subreddits' domain is the correct data-preparation step for the
-angle.
+GENOME events are the unit of analysis. From the full GENOME dataset, we keep
+only events where **Location country = Ukraine** and **Actor country = Ukraine or
+Russia**.
+
+This filter follows from the angle itself, not just from the case study. The
+angle enriches an event with the public's reaction to it, so it only works for
+events that people have widely discussed in the two selected subreddits.
 
 ### Reddit
 
@@ -116,7 +115,7 @@ HuggingFace. To fit the domain of the GENOME tool, the subreddits
 ## 3. Method
 
 The pipeline runs per time period (2022-02 and 2024-01). Each numbered step maps
-to a script in this repository (see Section 6).
+to a file in this repository (see Section 6).
 
 1. **Download and filter the Reddit posts.** Filter the monthly submissions dump
    for r/worldnews and r/geopolitics, keeping any post whose **title** contains
@@ -148,10 +147,7 @@ to a script in this repository (see Section 6).
   JSON parsing.
 - **Seven emotions, not positive/negative.** Fear, anger, and sadness are all
   "negative" but mean very different things for this angle, so a seven-emotion
-  classifier is used. A 27-label GoEmotions model is a drop-in for finer detail.
-- **Event as the unit of analysis.** Sentiment is treated as a measured attribute
-  *of a GENOME event*, which keeps the analysis anchored in GENOME data rather
-  than in Reddit alone.
+  classifier is used. 
 - **Upvote weighting.** Alongside raw emotion shares, an upvote-weighted variant
   measures which emotions the community *amplified*, not merely expressed.
 - **Data assumptions / limitations.** Comments on posts made late in a month can
@@ -162,36 +158,71 @@ to a script in this repository (see Section 6).
 
 ## 5. What the angle makes visible
 
-The angle produces two complementary outputs: an event-level analysis table for
-rigour, and an interactive dashboard for exploration and communication.
+
 
 ### The interactive dashboard
 
-`tone_dashboard.html` is a single self-contained page (open it in any browser; no
-server or build step) that presents the results for a non-technical reader. Every
-view can be filtered to **all events, a single event, or a single subreddit
-post**, with an additional subreddit toggle, and all charts recompute instantly
-in the browser. It is built by `visualize_tone.py` and has the following
-components:
+Each generated dashboard is a single self-contained HTML page (open it in any
+browser — no server or build step, though it loads Chart.js from a CDN so it needs
+internet the first time) that presents the results for a non-technical reader. It
+is built by `visualize_tone.py` from one tone-classified comment CSV.
+
+**Filtering.** Two dropdowns and a subreddit toggle set the scope, and every stat
+and chart recomputes instantly in the browser:
+
+- *Event* — all events, or one specific event. Choosing an event narrows the Post
+  dropdown to that event's posts.
+- *Post* — all posts in the current scope, or a single subreddit post.
+- *Subreddit* — a toggle (all / r/worldnews / r/geopolitics) that composes with
+  the two dropdowns, so you can, for example, isolate one community's reaction to
+  one event.
+
+Comments with no usable text (`[deleted]` / `[removed]`) are counted separately
+and never fold into the emotion figures. The components are:
 
 - **GENOME event card (top).** The selected event's full record straight from the
-  GENOME data — date, event type and category, coded intensity, article count,
-  summary, core sentence, source quote, and the actor / recipient / third-party /
-  location agents. This anchors the whole page in the event that generated the
-  discussion.
-- **Headline stat cards.** Comment volume, share of negative comments, dominant
-  tone, mean model confidence, mean valence, and the upvote skew (whether the
-  community amplified warmer or angrier comments).
-- **Emotion mix.** A ring of the dominant emotion per comment.
-- **Emotion profile.** The mean probability of each emotion — the event's tonal
-  fingerprint, using the full soft scores rather than only the top label.
-- **Tone over time.** A stacked area of each emotion's share across time bins,
-  showing how the mood of the discussion evolves.
-- **What the crowd amplified.** Raw emotion share vs upvote-weighted share, per
-  emotion.
-- **Valence distribution.** A histogram of per-comment valence on the −1…+1 scale.
-- **Representative comments.** The highest-confidence comment per emotion, keeping
-  the numbers tied to real text.
+  GENOME data — date, event type and category (colour-coded conflict vs
+  cooperation), coded intensity, article count, the event summary, the core
+  sentence, the source quote, and the actor / recipient / third-party / location
+  agents with their raw, normalised, and country values. This anchors the whole
+  page in the event that generated the discussion, mirroring GENOME's own event
+  view. When *all events* is selected it collapses to a short overview line.
+
+- **Headline stat cards.** Six numbers for the current scope: comment volume
+  (and how many were text-less), the share of negative comments
+  (anger/fear/sadness/disgust), the dominant tone, mean model confidence, mean
+  valence on a −1 (hostile) to +1 (warm) scale, and the **upvote skew** — the gap
+  between upvote-weighted and raw valence, i.e. whether the crowd upvoted warmer
+  or angrier comments than the average.
+
+- **Emotion mix.** A ring showing the share of comments whose *dominant* emotion
+  is each of the seven — the quickest read of "what did people mostly feel."
+
+- **Emotion profile.** The *mean probability* of each emotion across all comments
+  in scope — the event's tonal fingerprint. Unlike the mix ring, this uses the
+  model's full soft scores, so a comment that is 45% anger / 40% fear contributes
+  to both rather than being forced into one bucket; it reveals blends the ring
+  hides.
+
+- **Tone over time.** A stacked-area chart of each emotion's share across time
+  bins, showing how the mood of the discussion evolves — for example surprise
+  spiking at an event's onset, then giving way to anger or sadness. The bin width
+  adapts to the time span in scope; a note appears if the span is too short to
+  bin meaningfully.
+
+- **What the crowd amplified.** Raw emotion share vs *upvote-weighted* share, side
+  by side per emotion. Where the weighted bar exceeds the raw bar, the community
+  endorsed that emotion by upvoting it — separating what people *expressed* from
+  what the crowd *amplified*.
+
+- **Valence distribution.** A histogram of per-comment valence across the −1…+1
+  scale (red below zero, green above), showing whether the reaction is uniformly
+  hostile, split into warm and cold camps, or clustered near neutral — detail that
+  a single mean valence figure flattens.
+
+- **Representative comments.** The highest-confidence comment for each emotion,
+  shown as quote cards with the score, keeping every number tied to real human
+  text so the reader can sanity-check what the model is picking up.
 ---
 
 ## 6. How to run
@@ -231,25 +262,39 @@ top of `process_data.py`, then run:
 python process_data.py
 ```
 
-This produces the tone-classified comments for that period, e.g.
-`data/tone_comments/new_model_2022_02_tone_comments.csv`. 
+This ### Stage 2 — generate the dashboard (without running Stage 1)
 
-### Stage 2 — generate the dashboard
+Stage 1 is the stage that requires a lot of computational power. You
+don't need to run it to see the dashboard: the tone-classified CSVs it produces
+are already committed to this repository under `data/tone_comments/`, so you can
+build the dashboard directly from them.
 
-The dashboard is built **from the output of Stage 1**, so that CSV must be present
-in the `data/tone_comments/` folder first. 
-This file is readily-available, so it is possible to access the dashboard without running the data processing steps.
-
+From a clean machine:
 
 ```bash
+# 1. clone the repository
+git clone <REPO_URL>
+cd <REPO_NAME>
+
+# 2. set up the environment (only pandas + numpy are needed for this stage)
+python -m venv .venv
+source .venv/bin/activate            # Windows: .venv\Scripts\activate
+pip install pandas numpy
+
+# 3. build the dashboard from the pre-computed tone CSV
 python visualize_tone.py \
     --in data/tone_comments/new_model_2022_02_tone_comments.csv \
     --out 2022_02_dashboard.html
 ```
 
+Then open `2022_02_dashboard.html` in any browser. For the January 2024 period,
+point `--in` at `data/tone_comments/new_model_2024_01_tone_comments.csv` instead.
 
-Open the resulting `.html` in any browser to explore the results interactively.
-
+The dashboard is a single self-contained HTML file (it loads Chart.js from a CDN,
+so an internet connection is needed the first time you open it, but no server or
+build step). You can also just open a pre-generated `2022_02_dashboard.html` /
+`2024_01_dashboard.html` from the repository root directly, without running
+step 3 at all.
 ---
 
 ## 7. Repository structure

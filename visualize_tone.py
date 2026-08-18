@@ -23,14 +23,18 @@ All per-comment rows are baked into the page as compact columnar arrays and
 every aggregate (mix, profile, timeline, upvote-weighting, valence histogram,
 exemplars) is computed client-side for the current scope.
 
-Views: stat cards · emotion mix donut · mean emotion profile · tone over time
-(stacked share) · raw vs upvote-weighted share · valence histogram · a strip of
-the highest-confidence comment per emotion.
+Views: GENOME event card · stat cards · emotion mix donut · mean emotion profile
+· tone over time (stacked share) · raw vs upvote-weighted share · valence
+histogram · a strip of the highest-confidence comment per emotion.
+
+The GENOME event card at the top shows the selected event's full record and
+needs the events CSV, so pass --events to enable it.
 
 Usage
 -----
     python visualize_tone.py \
         --in comments_toned.csv \
+        --events events.csv \
         --out tone_dashboard.html \
         --max-body 200            # truncate comment bodies baked into the page
 
@@ -68,6 +72,16 @@ EMO_VALENCE = {
 NEG_EMOTIONS = ["anger", "disgust", "fear", "sadness"]
 _DEAD = "no_text"
 
+# GENOME event fields carried into the event card (from the events CSV).
+_DETAIL_FIELDS = [
+    "event_summary", "source_quote", "core_sentence", "article_count",
+    "article_links", "actor_raw_names", "actor_normalized_names",
+    "actor_countries", "recipient_raw_names", "recipient_normalized_names",
+    "recipient_countries", "third_party_raw_names",
+    "third_party_normalized_names", "third_party_countries",
+    "location_raw_names", "location_normalized_names", "location_countries",
+]
+
 
 def _emotion_cols(df: pd.DataFrame) -> list[str]:
     """Emotion probability columns present, in a stable order (known first)."""
@@ -98,7 +112,8 @@ def _require_toned(df: pd.DataFrame, in_path: str) -> None:
 
 
 def build_payload(
-    df: pd.DataFrame, max_body: int, event_intensity: Optional[float]
+    df: pd.DataFrame, max_body: int, event_intensity: Optional[float],
+    events_df: Optional[pd.DataFrame] = None,
 ) -> dict:
     """Bake per-comment columnar data + the index tables the UI needs."""
     df = df.copy()
@@ -106,6 +121,27 @@ def build_payload(
         if c in df.columns:
             df[c] = df[c].astype(str)
     emo = _emotion_cols(df)
+
+    # ---- GENOME event detail from the events CSV (optional) ----------------
+    # Keyed by event id; used to fill the event card. intensity/category are
+    # also surfaced on each event entry.
+    ev_intensity, ev_category, ev_detail = {}, {}, {}
+    if events_df is not None and "id" in events_df.columns:
+        e2 = events_df.copy()
+        e2["id"] = e2["id"].astype(str)
+        for _, r in e2.iterrows():
+            eid = r["id"]
+            v = pd.to_numeric(r.get("intensity"), errors="coerce")
+            if pd.notna(v):
+                ev_intensity[eid] = float(v)
+            if "category" in e2.columns and pd.notna(r.get("category")):
+                ev_category[eid] = str(r["category"])
+            det = {}
+            for f in _DETAIL_FIELDS:
+                if f in e2.columns:
+                    val = r[f]
+                    det[f] = "" if pd.isna(val) else str(val)
+            ev_detail[eid] = det
 
     # ---- build index tables (events, posts, subreddits) from ALL rows ------
     def _first(series):
@@ -116,11 +152,18 @@ def build_payload(
 
     ev_meta = {}
     for eid, g in df.groupby("event_id"):
+        # category: prefer the events file, fall back to the toned file's column
+        cat = ev_category.get(eid)
+        if cat is None and "event_category" in g:
+            cat = str(_first(g.get("event_category", pd.Series([""]))))
         ev_meta[eid] = {
             "id": eid,
             "type": str(_first(g.get("event_type", pd.Series([""])))),
             "date": str(_first(g.get("event_date", pd.Series([""])))),
             "core": str(_first(g.get("core_sentence", pd.Series([""])))),
+            "intensity": ev_intensity.get(eid),          # None if no events file
+            "category": cat or "",
+            "detail": ev_detail.get(eid, {}),            # full record if provided
         }
     # order events by date then id, for a tidy dropdown
     events = sorted(ev_meta.values(), key=lambda d: (d["date"], d["id"]))
@@ -179,6 +222,7 @@ def build_payload(
         "comments": comments,
         "dead": dead_cols,
         "refIntensity": event_intensity,
+        "hasEventData": any(e.get("detail") for e in events),
         "backend": str(df["tone_backend"].iloc[0]) if "tone_backend" in df else "",
     }
 
@@ -189,6 +233,7 @@ def visualize_tone(
     event_intensity: Optional[float] = None,
     max_body: int = 200,
     max_rows: Optional[int] = None,
+    events_path: Optional[str] = None,
 ) -> str:
     df = pd.read_csv(in_path)
     _require_toned(df, in_path)
@@ -201,7 +246,9 @@ def visualize_tone(
         df = pd.concat([live, dead], ignore_index=True)
         print(f"[note] sampled to {len(live):,} live rows (--max-rows).", file=sys.stderr)
 
-    payload = build_payload(df, max_body=max_body, event_intensity=event_intensity)
+    events_df = pd.read_csv(events_path) if events_path else None
+    payload = build_payload(df, max_body=max_body, event_intensity=event_intensity,
+                            events_df=events_df)
     out = _TEMPLATE.replace("__DATA__", json.dumps(payload))
     with open(out_path, "w", encoding="utf-8") as fh:
         fh.write(out)
@@ -209,6 +256,9 @@ def visualize_tone(
     n_live = len(payload["comments"]["ei"])
     print(f"[done] {n_live:,} classified comments, {len(payload['events'])} events, "
           f"{len(payload['posts'])} posts -> {out_path}", file=sys.stderr)
+    if not payload["hasEventData"]:
+        print("[note] no event detail loaded — pass --events EVENTS.csv to show the "
+              "GENOME event card.", file=sys.stderr)
     if payload["backend"] == "lexicon":
         print("[note] backend=lexicon: numbers are illustrative; rerun the "
               "classifier with the neural model for real tone.", file=sys.stderr)
@@ -235,6 +285,22 @@ _TEMPLATE = r"""<!doctype html>
   .head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
   .head h1{font-size:20px;margin:0;letter-spacing:.2px}
   .head .sub{color:var(--muted);font-size:13px}
+  /* GENOME event detail card */
+  .evcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin:18px 0}
+  .evcard .top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:4px}
+  .evcard .date{font-size:20px;font-weight:700}
+  .evcard .etag{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;letter-spacing:.4px;color:#fff}
+  .evcard .ctag{font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;letter-spacing:.4px;background:transparent;border:1px solid var(--line);color:var(--muted)}
+  .evcard .meta{color:var(--muted);font-size:12px}
+  .evcard .sec{margin-top:14px}
+  .evcard .sec .lab{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:3px}
+  .evcard .sec .val{font-size:13px;color:#d8e2f0;line-height:1.5}
+  .evcard .val.srcq{font-style:italic;color:#b9c6da}
+  .agrid{display:grid;grid-template-columns:1fr 1fr;gap:14px 28px;margin-top:14px}
+  .agent .role{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:4px}
+  .agent .kv{font-size:12px;color:#cdd8e8;line-height:1.5}
+  .agent .kv b{color:var(--muted);font-weight:600}
+  .evprompt{color:var(--muted);font-size:13px}
   /* controls */
   .controls{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;
     background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:18px 0}
@@ -267,10 +333,12 @@ _TEMPLATE = r"""<!doctype html>
   .quote .body{font-size:13px;color:#d3ddec;margin-top:6px;line-height:1.45}
   .quote .meta{font-size:11px;color:var(--muted);margin-top:8px}
   .empty{color:var(--muted);text-align:center;padding:40px;font-size:14px}
-  @media(max-width:900px){.cards{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}.scope{margin-left:0}}
+  @media(max-width:900px){.cards{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}.scope{margin-left:0}.agrid{grid-template-columns:1fr}}
 </style></head>
 <body><div class="wrap">
   <div class="head"><h1>Comment tone</h1><span class="sub">emotional reaction across events · posts · comments</span></div>
+
+  <div class="evcard" id="evcard"></div>
 
   <div class="controls">
     <div class="ctl"><label>Event</label><select id="fEvent"></select></div>
@@ -298,6 +366,9 @@ const N = C.ei.length;
 Chart.defaults.color = "#8698b1";
 Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
 Chart.defaults.borderColor = "rgba(255,255,255,0.05)";
+
+// hide the event card entirely when no events CSV was supplied
+if(!D.hasEventData){ const ec=document.getElementById("evcard"); if(ec) ec.style.display="none"; }
 
 // ---------- state ----------
 let selEvent = -1;   // -1 = all
@@ -330,6 +401,45 @@ fSubs.querySelectorAll(".pill").forEach(el=>el.onclick=()=>{
 fEvent.onchange = ()=>{ selEvent = parseInt(fEvent.value); fillPosts(); render(); };
 fPost.onchange  = ()=>{ selPost  = parseInt(fPost.value); render(); };
 fillEvents(); fillPosts();
+
+// ---------- GENOME event card ----------
+function renderEventCard(){
+  if(!D.hasEventData) return;
+  const el = document.getElementById("evcard");
+  if(selEvent<0){
+    el.innerHTML = `<div class="evprompt">Showing <b style="color:var(--ink)">all ${D.events.length} events</b>. `
+      + `Pick an event from the dropdown to see its full GENOME record here.</div>`;
+    return;
+  }
+  const e = D.events[selEvent], d = e.detail || {};
+  const etagColor = /CONFLICT/i.test(e.category) ? "#e5484d" : /COOP/i.test(e.category) ? "#30a46c" : "#7c8695";
+  const esc = s => (s||"").replace(/</g,"&lt;");
+  const sec = (lab,val,cls="") => val ? `<div class="sec"><div class="lab">${lab}</div><div class="val ${cls}">${esc(val)}</div></div>` : "";
+  const agent = (role,raw,norm,ctry) => {
+    if(!raw && !norm && !ctry) return "";
+    const line=(k,v)=>`<div class="kv"><b>${k}:</b> ${esc(v)||"—"}</div>`;
+    return `<div class="agent"><div class="role">${role}</div>${line("Raw",raw)}${line("Norm",norm)}${line("Countries",ctry)}</div>`;
+  };
+  const artLink = (d.article_links && /^https?:\/\//.test(d.article_links))
+    ? `<a href="${d.article_links.split(/[;, ]/)[0]}" target="_blank" style="color:var(--accent);font-size:12px">View article ↗</a>` : "";
+  el.innerHTML = `
+    <div class="top">
+      <span class="date">${esc(e.date)}</span>
+      <span class="etag" style="background:${etagColor}">${(e.type||"EVENT").toUpperCase()}</span>
+      ${e.category?`<span class="ctag">${esc(e.category)}</span>`:""}
+      <span class="meta">Intensity ${e.intensity??"—"}${d.article_count?` · ${d.article_count} linked article${d.article_count=="1"?"":"s"}`:""}</span>
+      <span style="margin-left:auto">${artLink}</span>
+    </div>
+    ${sec("Summary", d.event_summary)}
+    ${sec("Core sentence", e.core || d.core_sentence)}
+    ${sec("Source quote", d.source_quote, "srcq")}
+    <div class="agrid">
+      ${agent("Actor", d.actor_raw_names, d.actor_normalized_names, d.actor_countries)}
+      ${agent("Recipient", d.recipient_raw_names, d.recipient_normalized_names, d.recipient_countries)}
+      ${agent("Third party", d.third_party_raw_names, d.third_party_normalized_names, d.third_party_countries)}
+      ${agent("Location", d.location_raw_names, d.location_normalized_names, d.location_countries)}
+    </div>`;
+}
 
 // ---------- filtering ----------
 function filteredIdx(){
@@ -385,6 +495,7 @@ function fmtT(t){const d=new Date(t*1000);const p=n=>String(n).padStart(2,"0");
 
 // ---------- render ----------
 function render(){
+  renderEventCard();
   const idx = filteredIdx();
   const nDead = deadCount();
   const grid = document.getElementById("grid");
@@ -492,6 +603,8 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--in", dest="in_path", required=True, help="toned comments CSV")
     ap.add_argument("--out", dest="out_path", default="tone_dashboard.html")
+    ap.add_argument("--events", dest="events_path", default=None,
+                    help="GENOME events CSV (enables the event detail card)")
     ap.add_argument("--event-intensity", type=float, default=None,
                     help="optional GENOME coded intensity to show on the valence panel")
     ap.add_argument("--max-body", type=int, default=200,
@@ -500,15 +613,16 @@ def main() -> None:
                     help="sample live rows down to this many to keep the file light")
     args = ap.parse_args()
 
-    args = ap.parse_args()
-
     visualize_tone(
         in_path=args.in_path,
         out_path=args.out_path,
         event_intensity=args.event_intensity,
         max_body=args.max_body,
         max_rows=args.max_rows,
+        events_path=args.events_path,
     )
+
+    #visualize_tone(in_path="data/tone_comments/new_model_2022_02_tone_comments.csv", events_path="data/events/EVENTS_2022_02.csv",out_path="2022_02_dashboard.html")
 
 
 if __name__ == "__main__":
