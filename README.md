@@ -137,21 +137,6 @@ to a script in this repository (see Section 6).
    the `emotion-english-distilroberta-base` model (seven emotions: anger,
    disgust, fear, joy, neutral, sadness, surprise). → `classify_tone.py`
 
-### Making it GENOME-centric: enrichment and analysis
-
-The steps above produce comments linked to events. The analysis then **flips the
-unit of analysis from the comment to the event** (`event_sentiment_analysis.py`):
-each GENOME event is enriched with a public-emotion signature aggregated from its
-linked comments, and that signature is analysed against GENOME's own structured
-fields. Two kinds of preparation are done on the GENOME events:
-
-- **Enrichment (external signal).** Each event gains a crowd-emotion signature:
-  mean valence (mapped onto the same −1…+1 scale GENOME uses for intensity),
-  dominant emotion, per-emotion means, engagement (summed upvotes), and a
-  **reaction gap** (crowd valence − coded intensity).
-- **Feature derivation (intrinsic).** The conflict/cooperation axis is made an
-  explicit column derived from the event category.
-
 ---
 
 ## 4. Key design choices, assumptions, and trade-offs
@@ -205,10 +190,6 @@ components:
 - **What the crowd amplified.** Raw emotion share vs upvote-weighted share, per
   emotion.
 - **Valence distribution.** A histogram of per-comment valence on the −1…+1 scale.
-- **GENOME view.** The event-level analysis, visualised: one bubble per event with
-  x = coded intensity, y = public mean valence, bubble size = upvote engagement,
-  and colour = category. A diagonal marks where public tone equals the coded
-  intensity, so the reaction gap reads off as distance from the line.
 - **Representative comments.** The highest-confidence comment per emotion, keeping
   the numbers tied to real text.
 ---
@@ -256,15 +237,14 @@ This produces the tone-classified comments for that period, e.g.
 ### Stage 2 — generate the dashboard
 
 The dashboard is built **from the output of Stage 1**, so that CSV must be present
-in the `data/tone_comments/` folder first. If you ran `process_data.py` on another
-machine (for example a GPU box or a server), **download its output CSV into
-`data/tone_comments/`** before continuing. Then run the visualizer, pointing
-`--in` at that file:
+in the `data/tone_comments/` folder first. 
+This file is readily-available, so it is possible to access the dashboard without running the data processing steps.
+
 
 ```bash
 python visualize_tone.py \
     --in data/tone_comments/new_model_2022_02_tone_comments.csv \
-    --out outputs/2022_02_dashboard.html
+    --out 2022_02_dashboard.html
 ```
 
 
