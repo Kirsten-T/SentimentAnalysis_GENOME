@@ -43,26 +43,17 @@ already recognises but does not yet let an analyst navigate by.
 
 ### What questions it lets an analyst or policymaker answer
 
-Because the angle measures public emotion on the same events GENOME already
-codes, it makes several questions askable that no existing angle can pose:
 
-- **Does public tone track, lag, or lead the coded severity of an event?** If
-  public anger rises before the event stream escalates, sentiment is an
-  early-warning signal; if it only reacts afterward, it is a barometer.
-- **Where does public reaction diverge from the analyst-coded intensity?** A
-  muted response to a severe event, or public fury at an event coded as minor,
-  is the kind of mismatch that precedes protest, policy pressure, or escalation.
-- **When a state escalates, does the affected public skew toward fear
-  (deterrence) or anger (backlash)?** These imply opposite policy responses.
-- **Does the emotional register of the same event differ between communities?**
-  (e.g. a mass-audience subreddit vs a more analytical one.)
-- **Two years into a conflict, has the public's emotional baseline shifted from
-  acute fear/anger to fatigue and neutrality** — i.e. is salience decaying while
-  the conflict continues?
+This layer measures public emotion on the same events GENOME already codes, so it can answer questions the country, organisation, and leader angles can't:
 
-The angle also captures *trajectory*, not just a snapshot: the sequence of
-emotions (for example fear → anger, or anger → neutral) carries meaning that an
-averaged sentiment score would destroy.
+- Does public feeling change before, during, or after an event? If anger builds before an escalation, that's an early warning. If it only rises afterward, it's just a reaction.
+- Which events did the public react to more or less strongly than the coding suggests? A serious event that gets little response, or a lot of anger about a minor one, is often where protest or political pressure starts.
+- When a state escalates, does the other side's public react with fear or with anger? The two often call for different responses.
+- Do different communities react to the same event in different ways? A large general subreddit and a smaller, more specialist one may not respond the same way.
+- Two years on, has the mood shifted from fear and anger to fatigue and indifference? If so, public attention may be fading even while the conflict continues.
+
+It also shows how feeling changes over time, not just where it ends up. A discussion that moves from fear to anger, or from anger to indifference, tells you something a single average score would miss.
+
 
 ---
 
@@ -262,7 +253,7 @@ top of `process_data.py`, then run:
 python process_data.py
 ```
 
-This ### Stage 2 — generate the dashboard (without running Stage 1)
+### Stage 2 — generate the dashboard (without running Stage 1)
 
 Stage 1 is the stage that requires a lot of computational power. You
 don't need to run it to see the dashboard: the tone-classified CSVs it produces
@@ -284,6 +275,7 @@ pip install pandas numpy
 # 3. build the dashboard from the pre-computed tone CSV
 python visualize_tone.py \
     --in data/tone_comments/new_model_2022_02_tone_comments.csv \
+    --events data/events/EVENTS_2022_02.csv \
     --out 2022_02_dashboard.html
 ```
 
