@@ -1,4 +1,4 @@
-# Public Sentiment — a new GENOME domain angle
+# Public Sentiment: a new GENOME domain angle
 
 **A public-reaction layer for GENOME: for each geopolitical event, measure the
 sentiment and tone of the general public's response on social media.**
@@ -46,11 +46,11 @@ already recognises but does not yet let an analyst navigate by.
 
 This layer measures public emotion on the same events GENOME already codes, so it can answer questions the country, organisation, and leader angles can't:
 
-- Does public feeling change before, during, or after an event? If anger builds before an escalation, that's an early warning. If it only rises afterward, it's just a reaction.
-- Which events did the public react to more or less strongly than the coding suggests? A serious event that gets little response, or a lot of anger about a minor one, is often where protest or political pressure starts.
-- When a state escalates, does the other side's public react with fear or with anger? The two often call for different responses.
-- Do different communities react to the same event in different ways? A large general subreddit and a smaller, more specialist one may not respond the same way.
-- Two years on, has the mood shifted from fear and anger to fatigue and indifference? If so, public attention may be fading even while the conflict continues.
+- **Does public feeling change before, during, or after an event?** If anger builds before an escalation, that's an early warning. If it only rises afterward, it's just a reaction.
+- **Which events did the public react to more or less strongly than the coding suggests?** A serious event that gets little response, or a lot of anger about a minor one, is often where protest or political pressure starts.
+- **When a state escalates, does the other side's public react with fear or with anger?** The two often call for different responses.
+- **Do different communities react to the same event in different ways?** A large general subreddit and a smaller, more specialist one may not respond the same way.
+- **In ongoing conflicts, has the mood shifted from fear and anger to fatigue and indifference?** If so, public attention may be fading even while the conflict continues.
 
 It also shows how feeling changes over time, not just where it ends up. A discussion that moves from fear to anger, or from anger to indifference, tells you something a single average score would miss.
 
@@ -59,28 +59,36 @@ It also shows how feeling changes over time, not just where it ends up. A discus
 
 ## 2. Data
 
-The analysis is scoped as a **case study** of the Ukraine–Russia conflict. This
-conflict was chosen as it is still going on and is clearly documented, and it has
-had large consequences for the geopolitical landscape, especially in Europe. Two
-time points are examined: sentiment during the month of the Ukraine invasion
-(**February 2022**), and sentiment two years later (**January 2024**).
+In principle, this approach applies to any GENOME event: for a given event,
+measure how the public reacted to it. Doing this for *every* event would mean
+processing social-media data at a scale this project can't currently support (see
+the constraint below). This submission therefore demonstrates the approach on a
+single case study rather than the full dataset.
 
-A case study, rather than full coverage of every GENOME event, is a deliberate
-response to a data constraint: the Reddit data is only available as whole-month
-dumps, either all posts (~10GB) or all comments (~25GB) per month, and
-filtering these first requires large storage space, which is currently
-constrained. The case study therefore limits *how many* events are covered.
-Within that scope, the analysis draws on two data sources.
+**The case study is the Ukraine–Russia conflict.** It was chosen for three
+reasons: the conflict is ongoing, it is thoroughly documented, and it has had
+major consequences for the geopolitical landscape, especially in Europe. Two time
+points are examined:
+
+- **February 2022** — the month of the invasion.
+- **January 2024** — two years later, to see how public sentiment shifted.
+
+**Why a case study and not full coverage.** The public-reaction data comes from
+monthly Reddit dumps, which are only available as whole months at a time — roughly
+10GB for all posts or 25GB for all comments per month. Filtering these down
+requires a large amount of storage, which is currently limited. Restricting the
+work to one conflict keeps the data volume manageable. The same method would work
+on any event; the case study simply limits how much data is processed, not what
+the method can do.
+
+Within that scope, the analysis draws on two data sources: GENOME events and
+Reddit.
 
 ### GENOME events
 
-GENOME events are the unit of analysis. From the full GENOME dataset, we keep
-only events where **Location country = Ukraine** and **Actor country = Ukraine or
-Russia**.
+GENOME events are the unit of analysis. To filter the relevant entries from the full GENOME dataset, we keep only
+events where the **Location country is Ukraine** and the **Actor country is Ukraine or Russia**.
 
-This filter follows from the angle itself, not just from the case study. The
-angle enriches an event with the public's reaction to it, so it only works for
-events that people have widely discussed in the two selected subreddits.
 
 ### Reddit
 
@@ -215,6 +223,32 @@ and never fold into the emotion figures. The components are:
   shown as quote cards with the score, keeping every number tied to real human
   text so the reader can sanity-check what the model is picking up.
 ---
+### Insights
+### Example observations from the dashboards
+
+Comparing the two dashboards side by side, several things stand out right away.
+
+**Later events generate less engagement.** Even though the later dashboard covers
+far more events than the first (24 vs. 4), it contains far fewer comments — 9,226
+in January 2024 against 48,176 in February 2022. This suggests that events later
+in the war draw much less public discussion than the invasion did.
+
+**The emotional composition stays broadly stable.** The relative mix of emotions
+does not change dramatically between the two periods. Neutral is actually slightly
+higher in the first period (58.4% vs. 56.2% of comments), though this could partly
+reflect comments posted before the invasion itself.
+
+**Sentiment hardens over time.** The initial shock and occasional positivity seen
+in February 2022 fade in the later period: surprise falls (−1.0 point) and joy
+falls (−1.5 points, from 4.3% to 2.8%), while anger rises (+1.8 points, to 13.5%)
+and disgust rises the most (+2.9 points, to 13.8%). Overall mean valence is
+slightly more negative (−0.27 vs. −0.22), and the anger-to-fear ratio climbs from
+1.74 to 2.10 — the mood shifts from shock toward settled hostility.
+
+One more supporting detail worth mentioning: in both periods the upvote skew is
+negative (−0.05 in 2022, −0.05 in 2024), meaning the community consistently
+upvoted the angrier-than-average comments in both years — so the hardening isn't
+just what people wrote, it's what the crowd rewarded.
 
 ## 6. How to run
 
@@ -280,7 +314,7 @@ python visualize_tone.py \
 ```
 
 Then open `2022_02_dashboard.html` in any browser. For the January 2024 period,
-point `--in` at `data/tone_comments/new_model_2024_01_tone_comments.csv` instead.
+point `--in` at `data/tone_comments/new_model_2024_01_tone_comments.csv` and `--events` at `data/events/EVENTS_2024_01.csv`instead.
 
 The dashboard is a single self-contained HTML file (it loads Chart.js from a CDN,
 so an internet connection is needed the first time you open it, but no server or
@@ -299,7 +333,7 @@ step 3 at all.
 │   ├── fetch_comments.py                # pull comments on the linked posts (by link_id)
 │   └── classify_tone.py                 # 7-emotion tone classifier (DistilRoBERTa)
 ├── process_data.py                      # runs the full pipeline -> tone_comments CSVs
-├── visualize_tone.py                    # generate the interactive dashboard (HTML) from a tone CSV
+├── visualize_tone.py                    # generate the interactive dashboard (HTML) from a tone CSV and an event.csv
 ├── data/
 │   ├── reddit_dump/                     # inputs: monthly RS_/RC_ dumps (.zst)
 │   ├── events/                          # inputs: GENOME events CSVs (EVENTS_YYYY_MM.csv)
@@ -327,9 +361,7 @@ step 3 at all.
   run offline, and classifying tens of thousands of comments on CPU is slow;
   the classifier auto-detects a GPU to mitigate this.
 - **Accuracy of models.** The LLM models, used for linking GENOME events and subreddit posts, and for analysing the tone of the comments, are not always accurate. Also, within the scope of this assignment, it was not possible to benchmark and/or validate different models to test whether they perform well on our specific dataset.
-- **Linkage precision.** Because all posts share one topic, semantic similarity
-  alone over-links events to posts; a date window was needed to keep links
-  meaningful.
+
 
 ---
 
